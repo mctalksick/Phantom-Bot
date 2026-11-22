@@ -1,18 +1,21 @@
 const config = require("./config");
 const { startBot } = require("./lib/connect");
 const { decodeSession } = require("./lib/sessionExport");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+
+let botConnected = false;
 
 // Port binding for Web Services (Render, Railway, Koyeb, Heroku)
 const PORT = process.env.PORT || process.env.SERVER_PORT;
 if (PORT) {
   const server = http.createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(botConnected ? 200 : 503, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
-        status: "online",
+        status: botConnected ? "online" : "starting",
         bot: config.BOT_NAME,
         owner: config.OWNER_DISPLAY_NUMBER,
         version: config.BOT_VERSION,
@@ -43,7 +46,6 @@ async function main() {
 
     // If SESSION_ID is set in config, check hash or decode
     if (config.SESSION_ID && config.SESSION_ID.trim().length > 0) {
-      const crypto = require("crypto");
       const currentHash = crypto.createHash("sha256").update(config.SESSION_ID.trim()).digest("hex");
       let savedHash = "";
       try {
@@ -59,6 +61,8 @@ async function main() {
         console.log("[Main] New or updated SESSION_ID detected. Restoring clean session keys...");
         const decoded = decodeSession(config.SESSION_ID.trim(), true);
         if (decoded) {
+          fs.mkdirSync(config.SESSION_DIR, { recursive: true });
+          fs.writeFileSync(hashPath, currentHash, "utf-8");
           console.log("[Main] ✅ Session successfully initialized from SESSION_ID.");
         } else {
           console.warn("[Main] ⚠️ Could not decode SESSION_ID. Checking existing files...");
@@ -70,7 +74,7 @@ async function main() {
       console.log("[Main] ❌ No session found and no SESSION_ID provided in config / .env.");
       console.log("[Main] Please use the web pairing portal (phantom-session-web.onrender.com) to get a SESSION_ID.");
       console.log("[Main] Then paste it into your .env / config.js and restart.");
-      return;
+      process.exit(1);
     }
 
     if (fs.existsSync(credsPath)) {
@@ -79,18 +83,28 @@ async function main() {
 
       // Apply MCHINKU_BOT profile name, status, and dark Mortal Kombat avatar once connected
       if (sock) {
+        const onConnected = async () => {
+          botConnected = true;
+          if (typeof config.applyBotProfile === "function") {
+            await config.applyBotProfile(sock);
+          }
+        };
+
         if (sock.user) {
-          await config.applyBotProfile(sock);
+          await onConnected();
         } else if (sock.ev) {
           sock.ev.on("connection.update", async ({ connection }) => {
             if (connection === "open") {
-              await config.applyBotProfile(sock);
+              await onConnected();
+            } else if (connection === "close") {
+              botConnected = false;
             }
           });
         }
       }
     } else {
       console.log("[Main] No valid credentials found. Check your SESSION_ID in config.js.");
+      process.exit(1);
     }
   } catch (err) {
     console.error("[Main] Fatal error:", err);
@@ -99,7 +113,7 @@ async function main() {
 }
 
 process.on("uncaughtException", (err) => {
-  console.error("[Main] Uncaught Exception:", err.message);
+  console.error("[Main] Uncaught Exception:", err);
 });
 
 process.on("unhandledRejection", (reason) => {
