@@ -16,7 +16,7 @@ const config = {
   MENU_IMAGE_URL: cleanEnv("MENU_IMAGE_URL") || identity.MENU_IMAGE_URL,
   applyBotProfile: identity.applyBotProfile,
 
-  PREFIX: cleanEnv("PREFIX") || "!",
+  PREFIX: cleanEnv("PREFIX") || ".",
   SESSION_ID: cleanEnv("SESSION_ID"),
 
   GEMINI_API_KEY: cleanEnv("GEMINI_API_KEY"),
