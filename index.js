@@ -10,13 +10,19 @@ const PORT = process.env.PORT || process.env.SERVER_PORT;
 if (PORT) {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "online", bot: config.BOT_NAME, version: config.BOT_VERSION }));
+    res.end(
+      JSON.stringify({
+        status: "online",
+        bot: config.BOT_NAME,
+        owner: config.OWNER_DISPLAY_NUMBER,
+        version: config.BOT_VERSION,
+      })
+    );
   });
   server.listen(PORT, () => {
     console.log(`[Web] Health check server listening on port ${PORT}`);
   });
 }
-
 
 console.log(`
  ██████╗ ██╗  ██╗ █████╗ ███╗   ██╗████████╗ ██████╗ ███╗   ███╗
@@ -25,12 +31,12 @@ console.log(`
  ██╔═══╝ ██╔══██║██╔══██║██║╚██╗██║   ██║   ██║   ██║██║╚██╔╝██║
  ██║     ██║  ██║██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║
  ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝
-                    B O T   v${config.BOT_VERSION}
+                 ${config.BOT_NAME}   v${config.BOT_VERSION}
 `);
 
 async function main() {
   try {
-    console.log(`[Main] Starting ${config.BOT_NAME}...`);
+    console.log(`[Main] Starting ${config.BOT_NAME} (Owner: ${config.OWNER_DISPLAY_NUMBER})...`);
 
     const credsPath = path.resolve(config.SESSION_DIR, "creds.json");
     const hashPath = path.resolve(config.SESSION_DIR, ".session_hash");
@@ -69,7 +75,20 @@ async function main() {
 
     if (fs.existsSync(credsPath)) {
       console.log("[Main] Credentials ready. Connecting bot...");
-      await startBot();
+      const sock = await startBot();
+
+      // Apply MCHINKU_BOT profile name, status, and dark Mortal Kombat avatar once connected
+      if (sock) {
+        if (sock.user) {
+          await config.applyBotProfile(sock);
+        } else if (sock.ev) {
+          sock.ev.on("connection.update", async ({ connection }) => {
+            if (connection === "open") {
+              await config.applyBotProfile(sock);
+            }
+          });
+        }
+      }
     } else {
       console.log("[Main] No valid credentials found. Check your SESSION_ID in config.js.");
     }
@@ -79,7 +98,6 @@ async function main() {
   }
 }
 
-
 process.on("uncaughtException", (err) => {
   console.error("[Main] Uncaught Exception:", err.message);
 });
@@ -87,6 +105,5 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason) => {
   console.error("[Main] Unhandled Rejection:", reason);
 });
-
 
 main();
